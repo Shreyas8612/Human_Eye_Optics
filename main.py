@@ -105,20 +105,24 @@ def refract_ray(x0, y0, theta, n1, n2, surface, derivative):
     return x_intersect, y_intersect, theta_new
 
 
-
 # Traces a ray from the object at position x,y through all surfaces
 # Returns the path of the ray as a list of (x, y) coordinates
 # If the ray does not intersect with a surface, return the path up to that point
-def trace_ray(start_x, start_y, surfaces, derivatives, n_indices):
+def trace_ray(start_x, start_y, surfaces, derivatives, n_indices, pupil_lines):
     x, y, theta = start_x, start_y, 0
     path = [(x, y)]
     for i, (surface, derivative) in enumerate(zip(surfaces, derivatives)):
         x, y, theta = refract_ray(x, y, theta, n_indices[i], n_indices[i + 1], surface, derivative)
+
+        # Check if the ray intersects with the pupil_lines
+        for line_x, line_y_min, line_y_max in pupil_lines:
+            if x >= line_x and line_y_min <= y <= line_y_max:
+                return path
+
         if np.isnan(x) or np.isnan(y):
             break
         path.append((x, y))
     return path
-
 
 
 # Creates the eye model with the surfaces, derivatives, refractive indices, eye length, and eye radius
@@ -174,10 +178,19 @@ def plot_eye_model(surfaces, eye_length, eye_radius):
 # Plot colored dots (object) at different y-positions
 def plot_colored_dots(x_position):
     colors = ['red', 'green', 'blue', 'brown', 'purple', 'orange', 'pink']
-    y_positions = [-1.75, 0, 1.75, -3.5, 3.5, -4.5, 4.5]
+    y_positions = [0, -1.75, 1.75, -3.5, 3.5, -2.25, 2.25]
     for color, y in zip(colors, y_positions):
-        plt.plot(x_position, y, 'o', color=color, markersize=10)
+        plt.plot(x_position, y, 'o', color=color, markersize=5)
 
+
+# Plot the black_lines for the pupil
+def plot_pupil_lines():
+    black_line_x = 7
+    plt.plot([black_line_x, black_line_x], [4.5, 2.5], 'k-', linewidth=1.5)
+    plt.plot([black_line_x, black_line_x], [-4.5, -2.5], 'k-', linewidth=1.5)
+
+    # Return the line position for checking ray intersection
+    return [(black_line_x, 2.5, 4.5), (black_line_x, -4.5, -2.5)]
 
 # Main function to create the eye model and trace rays
 def main():
@@ -185,25 +198,23 @@ def main():
     plot_eye_model(surfaces, eye_length, eye_radius)
 
     # Plot colored dots (object)
-    dots_x_position = -5
+    dots_x_position = -3
     plot_colored_dots(dots_x_position)
 
-    # Plot the black line for the pupil
-    #black_line_x = 7
-    #plt.plot([black_line_x, black_line_x], [6, 3], 'k-', linewidth=1.5)
-    #plt.plot([black_line_x, black_line_x], [-6, -3], 'k-', linewidth=1.5)
+    # Plot the black line for the pupil and get their coordinates for checking ray intersection
+    pupil_lines = plot_pupil_lines()
 
     # Trace rays from colored dots through all surfaces
     colors = ['red', 'green', 'blue', 'brown', 'purple', 'orange', 'pink']
-    y_positions = [-1.75, 0, 1.75, -3.5, 3.5, -4.5, 4.5]
+    y_positions = [0, -1.75, 1.75, -3.5, 3.5, -2.25, 2.25]
 
     for color, start_y in zip(colors, y_positions):
-        path = trace_ray(dots_x_position,start_y, surfaces, derivatives, n_indices)
+        path = trace_ray(dots_x_position,start_y, surfaces, derivatives, n_indices, pupil_lines)
         xs, ys = zip(*path)
         plt.plot(xs, ys, color=color, linestyle='-', linewidth=1.5)
 
-        # Plot the point where the ray hits the retina
-        plt.plot(xs[-1], ys[-1], 'o', color=color, markersize=10)
+        # Plot the point where the ray hits the retina or the pupil_lines
+        plt.plot(xs[-1], ys[-1], 'o', color=color, markersize=5)
     plt.show()
 
 # Runs when the script is executed directly (not when imported as a module).
