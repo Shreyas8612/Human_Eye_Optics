@@ -65,8 +65,8 @@ def create_derivative_inv(r):
     return derivative
 
 # Refracts a ray from (x0, y0) with angle theta through a surface defined by the function surface(y)
-# The surface is defined by the function surface(y) and its derivative derivative(y)
-# The ray is refracted from medium n1 to medium n2
+# Checks the intersection of the ray with the surface using a root-finding method (Newton's method)
+# Newton's method finds the root of the function by iteratively updating the guess
 # Returns the new position (x, y) and angle theta after refraction
 def refract_ray(x0, y0, theta, n1, n2, surface, derivative):
     # Define the function whose root we want to find
