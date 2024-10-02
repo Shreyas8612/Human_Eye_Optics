@@ -1,7 +1,7 @@
 # Import the necessary libraries
 import numpy as np
 import matplotlib.pyplot as plt
-
+from scipy import optimize
 
 # Snell's Law: n1 * sin(theta1) = n2 * sin(theta2)
 # Refracts a ray from medium 1 to medium 2 towards the normal if n2 > n1
@@ -64,39 +64,61 @@ def create_derivative_inv(r):
 
     return derivative
 
+# Refracts a ray from (x0, y0) with angle theta through a surface defined by the function surface(y)
+# The surface is defined by the function surface(y) and its derivative derivative(y)
+# The ray is refracted from medium n1 to medium n2
+# Returns the new position (x, y) and angle theta after refraction
+def refract_ray(x0, y0, theta, n1, n2, surface, derivative):
+    # Define the function whose root we want to find
+    def func(y):
+        x_surface = surface(y)
+        if np.isnan(x_surface):
+            return np.nan
+        return y0 + (x_surface - x0) * np.tan(theta) - y  # Difference between ray y and surface y
 
-# Refracts a ray at position (x, y) with angle theta from medium 1 to medium 2
-# x_intersect is the x-coordinate of the intersection point with the surface
-# Normal_angle is the inverse tangent of the derivative at the intersection point
-# Returns the intersection point and the angle theta2 after refraction
-def refract_ray(x, y, theta, n1, n2, surface, derivative):
-    x_intersect = surface(y)
-    if np.isnan(x_intersect):
-        return x, theta
-    normal_angle = np.arctan(derivative(y))
+    # Initial guess for y is current y0
+    y_guess = y0
+
+    # Use a root-finding method to find the intersection y
+    try:
+        y_intersect = optimize.newton(func, y_guess)
+    except (RuntimeError, ValueError):
+        # If the solver fails, return current position and angle
+        return x0, y0, theta
+
+    # Now compute x_intersect
+    x_intersect = surface(y_intersect)
+
+    # Calculate the normal angle at the point of intersection
+    normal_angle = np.arctan(derivative(y_intersect))
+
+    # Calculate the incident angle
     theta1 = theta - normal_angle
+
+    # Calculate the refracted angle using Snell's Law
     theta2 = snell(n1, n2, theta1)
     if np.isnan(theta2):
-        return x, theta
-    return x_intersect, theta2 + normal_angle
+        return x_intersect, y_intersect, theta
+
+    # Update the ray angle
+    theta_new = theta2 + normal_angle
+    return x_intersect, y_intersect, theta_new
+
 
 
 # Traces a ray from the object at position x,y through all surfaces
 # Returns the path of the ray as a list of (x, y) coordinates
 # If the ray does not intersect with a surface, return the path up to that point
-def trace_ray_color(start_x, start_y, surfaces, derivatives, n_indices):
+def trace_ray(start_x, start_y, surfaces, derivatives, n_indices):
     x, y, theta = start_x, start_y, 0
     path = [(x, y)]
     for i, (surface, derivative) in enumerate(zip(surfaces, derivatives)):
-        try:
-            x, theta = refract_ray(x, y, theta, n_indices[i], n_indices[i + 1], surface, derivative)
-            if np.isnan(x) or np.isnan(theta):
-                break
-            y = start_y + (x - path[-1][0]) * np.tan(theta)
-            path.append((x, y))
-        except ValueError:
+        x, y, theta = refract_ray(x, y, theta, n_indices[i], n_indices[i + 1], surface, derivative)
+        if np.isnan(x) or np.isnan(y):
             break
+        path.append((x, y))
     return path
+
 
 
 # Creates the eye model with the surfaces, derivatives, refractive indices, eye length, and eye radius
@@ -108,7 +130,6 @@ def create_eye_model():
     lens_front_radius = 8.672
     lens_back_radius = 6.328
     cornea_thickness = 0.449
-    lens_thickness = 4.979
     cornea_to_lens = 2.794
     eye_length = 24.0
     eye_radius = 12.0
@@ -116,7 +137,7 @@ def create_eye_model():
     cornea_front = create_surface(cornea_front_radius, 5)
     cornea_back = create_surface(cornea_back_radius, cornea_thickness + 5)
     lens_front = create_surface(lens_front_radius, cornea_thickness + cornea_to_lens + 5)
-    lens_back = create_surface_inv(lens_back_radius, lens_thickness - 5)
+    lens_back = create_surface_inv(lens_back_radius, -0.566)
     retina = create_surface_inv(eye_radius, -5)
 
     surfaces = [cornea_front, cornea_back, lens_front, lens_back, retina]
@@ -129,7 +150,7 @@ def create_eye_model():
                    create_derivative(eye_radius)]
 
     # Refractive indices for different parts of the eye
-    n_indices = [1.0,1.376, 1.336, 1.406, 1.337, 1.0] # Air, Cornea, Aqueous humor, Lens, Vitreous humor, Retina
+    n_indices = [1.0, 1.376, 1.336, 1.406, 1.337, 1.0] # Air, Cornea, Aqueous humor, Lens, Vitreous humor, Retina
     return surfaces, derivatives, n_indices, eye_length, eye_radius
 
 
@@ -151,7 +172,6 @@ def plot_eye_model(surfaces, eye_length, eye_radius):
     plt.ylabel("Height (mm)")
 
 # Plot colored dots (object) at different y-positions
-
 def plot_colored_dots(x_position):
     colors = ['red', 'green', 'blue', 'brown', 'purple', 'orange', 'pink']
     y_positions = [-1.75, 0, 1.75, -3.5, 3.5, -4.5, 4.5]
@@ -168,7 +188,7 @@ def main():
     dots_x_position = -5
     plot_colored_dots(dots_x_position)
 
-    # Plot the black line (retina)
+    # Plot the black line for the pupil
     #black_line_x = 7
     #plt.plot([black_line_x, black_line_x], [6, 3], 'k-', linewidth=1.5)
     #plt.plot([black_line_x, black_line_x], [-6, -3], 'k-', linewidth=1.5)
@@ -178,7 +198,7 @@ def main():
     y_positions = [-1.75, 0, 1.75, -3.5, 3.5, -4.5, 4.5]
 
     for color, start_y in zip(colors, y_positions):
-        path = trace_ray_color(dots_x_position,start_y, surfaces, derivatives, n_indices)
+        path = trace_ray(dots_x_position,start_y, surfaces, derivatives, n_indices)
         xs, ys = zip(*path)
         plt.plot(xs, ys, color=color, linestyle='-', linewidth=1.5)
 
@@ -186,7 +206,6 @@ def main():
         plt.plot(xs[-1], ys[-1], 'o', color=color, markersize=10)
     plt.show()
 
-#did something
 # Runs when the script is executed directly (not when imported as a module).
 if __name__ == "__main__":
     main()
